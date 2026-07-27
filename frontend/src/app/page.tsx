@@ -34,6 +34,7 @@ export default function Home() {
     keyword?: string;
     bank?: string;
     promo_type?: string;
+    sort?: string;
   }>({ page: 1 });
 
   const loadPromotions = useCallback(

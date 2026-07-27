@@ -84,7 +84,8 @@ def get_latest_promotions(db: Session, limit: int = 20) -> list:
 
 
 def get_paginated_promotions(db: Session, page: int = 1, page_size: int = 20,
-                             keyword: str = None, bank: str = None, promo_type: str = None) -> dict:
+                             keyword: str = None, bank: str = None, promo_type: str = None,
+                             sort: str = "comprehensive") -> dict:
     """分页获取活动列表"""
     from sqlalchemy import func
 
@@ -101,10 +102,26 @@ def get_paginated_promotions(db: Session, page: int = 1, page_size: int = 20,
     total_pages = max(1, (total + page_size - 1) // page_size)
     page = max(1, min(page, total_pages))
 
-    items = query.order_by(Promotion.rating.desc(), Promotion.created_at.desc()) \
-        .offset((page - 1) * page_size) \
-        .limit(page_size) \
-        .all()
+    if sort == "rating":
+        items = query.order_by(Promotion.rating.desc(), Promotion.created_at.desc()) \
+            .offset((page - 1) * page_size) \
+            .limit(page_size) \
+            .all()
+    elif sort == "time":
+        items = query.order_by(Promotion.created_at.desc()) \
+            .offset((page - 1) * page_size) \
+            .limit(page_size) \
+            .all()
+    else:
+        # comprehensive: 评分×70% + 时间新鲜度×30%
+        # SQLite 用 julianday 算天数差
+        from sqlalchemy import literal_column
+        days_diff = func.julianday(func.datetime('now')) - func.julianday(Promotion.created_at)
+        score = Promotion.rating * 0.7 + (100.0 / (days_diff + 1)) * 0.3
+        items = query.order_by(score.desc()) \
+            .offset((page - 1) * page_size) \
+            .limit(page_size) \
+            .all()
 
     return {
         "items": items,
@@ -118,6 +135,58 @@ def get_paginated_promotions(db: Session, page: int = 1, page_size: int = 20,
 def get_promotion_by_uuid(db: Session, promo_uuid: str) -> Promotion:
     """根据 UUID 获取活动"""
     return db.query(Promotion).filter(Promotion.uuid == promo_uuid).first()
+
+
+def get_xhs_candidates(db: Session, limit: int = 20) -> list:
+    """小红书草稿候选：按用户规则筛选
+
+    规则：
+    - 时效 <=1天：无需看评分
+    - 时效 >1天：评分 >= 5
+    - 优先带图
+    """
+    from sqlalchemy import func
+    from datetime import datetime
+
+    now = datetime.utcnow()
+    all_items = db.query(Promotion).filter(Promotion.status == 'active').all()
+
+    candidates = []
+    for p in all_items:
+        # 时效计算（用 start_date 或 created_at）
+        ref_date = p.start_date or (p.created_at.date() if p.created_at else None)
+        if ref_date:
+            from .database import Promotion as _P
+            try:
+                from datetime import date
+                if isinstance(ref_date, date) and not isinstance(ref_date, datetime):
+                    d0 = ref_date
+                else:
+                    d0 = ref_date.date() if isinstance(ref_date, datetime) else ref_date
+                age_days = (now.date() - d0).days
+            except Exception:
+                age_days = 999
+        else:
+            age_days = 999
+
+        has_img = bool(p.images and p.images not in ('[]', '', None))
+
+        # 规则判断
+        if age_days <= 1:
+            pass  # 时效内，不看评分
+        else:
+            if (p.rating or 0) < 5:
+                continue  # 超1天且评分不足，淘汰
+
+        candidates.append({
+            "promo": p,
+            "age_days": age_days,
+            "has_img": has_img,
+        })
+
+    # 排序：带图优先，其次时效新，其次评分高
+    candidates.sort(key=lambda c: (not c["has_img"], c["age_days"], -(c["promo"].rating or 0)))
+    return candidates[:limit]
 
 
 def archive_expired(db: Session) -> int:

@@ -10,7 +10,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from .database import init_db, get_db
-from .crud import create_promotion, is_duplicate, get_latest_promotions, get_db_stats, get_paginated_promotions
+from .crud import create_promotion, is_duplicate, get_latest_promotions, get_db_stats, get_paginated_promotions, get_xhs_candidates, get_promotion_by_uuid
 from .ai_parser import parser
 from .telegram_push import pusher
 from .spiders.spider_manager import spider_manager
@@ -101,14 +101,15 @@ async def list_latest(
     keyword: str = None,
     bank: str = None,
     promo_type: str = None,
+    sort: str = "comprehensive",
     db: Session = Depends(get_db),
 ):
-    """获取最新活动列表（支持分页和筛选）"""
+    """获取最新活动列表（支持分页、筛选和排序）"""
     import json
 
     result = get_paginated_promotions(
         db, page=page, page_size=page_size,
-        keyword=keyword, bank=bank, promo_type=promo_type,
+        keyword=keyword, bank=bank, promo_type=promo_type, sort=sort,
     )
 
     return {
@@ -198,3 +199,82 @@ async def crawl_and_refresh(db: Session = Depends(get_db)):
         "total_count": after["count"],
         "message": f"新增 {saved_count} 条活动" if saved_count > 0 else "已是最新的消息"
     }
+
+
+@app.get("/api/xhs/candidates")
+async def xhs_candidates(limit: int = 20, db: Session = Depends(get_db)):
+    """小红书草稿候选列表（按时效+评分+带图规则筛选）"""
+    import json
+    cands = get_xhs_candidates(db, limit=limit)
+    return {
+        "success": True,
+        "data": [
+            {
+                "uuid": c["promo"].uuid,
+                "title": c["promo"].title,
+                "bank": c["promo"].bank,
+                "rating": c["promo"].rating or 0,
+                "age_days": c["age_days"],
+                "has_img": c["has_img"],
+                "images": json.loads(c["promo"].images) if c["promo"].images else [],
+                "content": c["promo"].content,
+                "url": c["promo"].url,
+                "author": c["promo"].author,
+            }
+            for c in cands
+        ],
+    }
+
+
+class DraftRequest(BaseModel):
+    uuid: str
+
+
+@app.post("/api/xhs/draft")
+async def xhs_draft(req: DraftRequest, db: Session = Depends(get_db)):
+    """根据帖子生成小红书草稿文案"""
+    promo = get_promotion_by_uuid(db, req.uuid)
+    if not promo:
+        raise HTTPException(status_code=404, detail="帖子不存在")
+
+    import json
+    images = json.loads(promo.images) if promo.images else []
+
+    prompt = f"""你是一个小红书爆款文案写手。请把下面的银行/平台优惠活动，改写成一篇**小红书风格的推文草稿**。
+
+要求：
+1. 标题：带emoji、有钩子、不超过20字
+2. 正文：口语化、分段清晰、突出"省钱/薅羊毛"价值，结尾引导互动
+3. 标签：5-8个相关话题标签（#信用卡优惠 #羊毛 等）
+4. 配图建议：说明用哪张图（若有）
+
+原始信息：
+标题：{promo.title}
+银行/平台：{promo.bank}
+评分：{promo.rating or 0}
+内容：{promo.content or '无'}
+参与链接：{promo.url or '无'}
+
+请直接输出可复制的小红书草稿（标题/正文/标签/配图建议分开）。"""
+
+    try:
+        async with __import__("httpx").AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                parser.api_url,
+                headers={"Authorization": f"Bearer {parser.api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": parser.model,
+                    "messages": [
+                        {"role": "system", "content": "你是小红书爆款文案专家，输出直接可用的草稿。"},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.7,
+                },
+            )
+            if resp.status_code == 200:
+                draft = resp.json()["choices"][0]["message"]["content"]
+                return {"success": True, "draft": draft, "images": images}
+            else:
+                return {"success": False, "message": f"AI调用失败: {resp.status_code}"}
+    except Exception as e:
+        return {"success": False, "message": f"异常: {str(e)}"}

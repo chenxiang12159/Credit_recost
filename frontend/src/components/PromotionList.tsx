@@ -22,6 +22,7 @@ export default function PromotionList({
     keyword?: string;
     bank?: string;
     promo_type?: string;
+    sort?: string;
   }) => void;
   onRefresh: () => void;
   isRefreshing: boolean;
@@ -29,41 +30,50 @@ export default function PromotionList({
   const [keyword, setKeyword] = useState("");
   const [bank, setBank] = useState("");
   const [type, setType] = useState("");
+  const [sort, setSort] = useState("comprehensive");
 
   const handleSearch = useCallback(() => {
-    onFetch({ page: 1, keyword, bank, promo_type: type });
-  }, [keyword, bank, type, onFetch]);
+    onFetch({ page: 1, keyword, bank, promo_type: type, sort });
+  }, [keyword, bank, type, sort, onFetch]);
 
   const handleKeywordChange = useCallback(
     (v: string) => {
       setKeyword(v);
-      if (v === "") onFetch({ page: 1, keyword: "", bank, promo_type: type });
+      if (v === "") onFetch({ page: 1, keyword: "", bank, promo_type: type, sort });
     },
-    [bank, type, onFetch]
+    [bank, type, sort, onFetch]
   );
 
   const handleBankChange = useCallback(
     (v: string) => {
       setBank(v);
-      onFetch({ page: 1, keyword, bank: v, promo_type: type });
+      onFetch({ page: 1, keyword, bank: v, promo_type: type, sort });
     },
-    [keyword, type, onFetch]
+    [keyword, type, sort, onFetch]
   );
 
   const handleTypeChange = useCallback(
     (v: string) => {
       setType(v);
-      onFetch({ page: 1, keyword, bank, promo_type: v });
+      onFetch({ page: 1, keyword, bank, promo_type: v, sort });
     },
-    [keyword, bank, onFetch]
+    [keyword, bank, sort, onFetch]
+  );
+
+  const handleSortChange = useCallback(
+    (v: string) => {
+      setSort(v);
+      onFetch({ page: 1, keyword, bank, promo_type: type, sort: v });
+    },
+    [keyword, bank, type, onFetch]
   );
 
   const handlePageChange = useCallback(
     (page: number) => {
-      onFetch({ page, keyword, bank, promo_type: type });
+      onFetch({ page, keyword, bank, promo_type: type, sort });
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
-    [keyword, bank, type, onFetch]
+    [keyword, bank, type, sort, onFetch]
   );
 
   return (
@@ -75,6 +85,8 @@ export default function PromotionList({
         onBankChange={handleBankChange}
         type={type}
         onTypeChange={handleTypeChange}
+        sort={sort}
+        onSortChange={handleSortChange}
         onRefresh={onRefresh}
         isRefreshing={isRefreshing}
       />

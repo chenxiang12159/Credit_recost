@@ -14,7 +14,7 @@ class AIParser:
     def __init__(self):
         self.api_key = os.getenv('DEEPSEEK_API_KEY')
         self.api_url = "https://api.deepseek.com/v1/chat/completions"
-        self.model = "deepseek-chat"
+        self.model = os.getenv('DEEPSEEK_MODEL', 'deepseek-v4-flash')
     
     async def extract_promotion(self, content: str) -> Optional[dict]:
         """从文本内容提取活动信息"""

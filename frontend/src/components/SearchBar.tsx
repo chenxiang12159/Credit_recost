@@ -7,6 +7,8 @@ interface SearchBarProps {
   onBankChange: (v: string) => void;
   type: string;
   onTypeChange: (v: string) => void;
+  sort: string;
+  onSortChange: (v: string) => void;
   onRefresh: () => void;
   isRefreshing: boolean;
 }
@@ -14,15 +16,19 @@ interface SearchBarProps {
 const banks = [
   "全部银行",
   "中国农业银行",
-  "中国工商银行",
   "广发银行",
-  "中国银行",
   "中信银行",
   "中国建设银行",
   "赚客吧",
 ];
 
 const types = ["全部类型", "返现", "折扣", "积分", "礼品", "其他"];
+
+const sorts = [
+  { value: "comprehensive", label: "综合排序", icon: "📊" },
+  { value: "rating", label: "评分优先", icon: "⭐" },
+  { value: "time", label: "时间优先", icon: "🕐" },
+];
 
 export default function SearchBar({
   keyword,
@@ -31,6 +37,8 @@ export default function SearchBar({
   onBankChange,
   type,
   onTypeChange,
+  sort,
+  onSortChange,
   onRefresh,
   isRefreshing,
 }: SearchBarProps) {
@@ -73,6 +81,23 @@ export default function SearchBar({
         >
           {isRefreshing ? "⏳ 爬取中..." : "🔄 刷新"}
         </button>
+      </div>
+
+      {/* 排序按钮 */}
+      <div className="flex gap-2 mt-3">
+        {sorts.map((s) => (
+          <button
+            key={s.value}
+            onClick={() => onSortChange(s.value)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              sort === s.value
+                ? "bg-primary-600 text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            {s.icon} {s.label}
+          </button>
+        ))}
       </div>
     </div>
   );
