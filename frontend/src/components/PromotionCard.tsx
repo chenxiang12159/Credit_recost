@@ -3,6 +3,23 @@
 import { useState, useEffect, useCallback } from "react";
 import { Promotion, proxyImage } from "@/lib/api";
 
+const READ_KEY = "read_promos";
+
+function loadRead(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(READ_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function toggleRead(uuid: string, current: boolean) {
+  const set = loadRead();
+  if (current) set.delete(uuid);
+  else set.add(uuid);
+  localStorage.setItem(READ_KEY, JSON.stringify([...set]));
+}
+
 const bankColors: Record<string, string> = {
   "中国农业银行": "bg-green-100 text-green-800",
   "广发银行": "bg-blue-100 text-blue-800",
@@ -23,6 +40,20 @@ export default function PromotionCard({ promo }: { promo: Promotion }) {
   const [expanded, setExpanded] = useState(false);
   const [selectedImageIdx, setSelectedImageIdx] = useState<number | null>(null);
   const images = promo.images || [];
+  const [read, setRead] = useState(false);
+
+  useEffect(() => {
+    setRead(loadRead().has(promo.uuid));
+  }, [promo.uuid]);
+
+  const markRead = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      toggleRead(promo.uuid, read);
+      setRead(!read);
+    },
+    [promo.uuid, read]
+  );
 
   const openImage = useCallback((idx: number) => {
     setSelectedImageIdx(idx);
@@ -60,7 +91,23 @@ export default function PromotionCard({ promo }: { promo: Promotion }) {
 
   return (
     <>
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
+      <div
+        className={`relative bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow ${
+          read ? "bg-gray-50 opacity-75" : ""
+        }`}
+      >
+        {/* 已读标记（右上角） */}
+        <button
+          onClick={markRead}
+          title={read ? "标记为未读" : "标记为已读"}
+          className={`absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center text-xs transition-colors ${
+            read
+              ? "bg-gray-300 text-white"
+              : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+          }`}
+        >
+          {read ? "✓" : "👁"}
+        </button>
         {/* 标题行 */}
         <div className="flex items-start justify-between gap-3">
           <h3 className="text-base font-semibold text-gray-900 leading-snug flex-1">

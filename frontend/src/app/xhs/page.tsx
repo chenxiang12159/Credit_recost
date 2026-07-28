@@ -16,6 +16,7 @@ export default function XhsPage() {
   const [draftImages, setDraftImages] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -33,6 +34,7 @@ export default function XhsPage() {
     setDraftUuid(uuid);
     setError("");
     setDraft("");
+    setCopied(false);
     const res = await generateXhsDraft(uuid);
     if (res.success && res.draft) {
       setDraft(res.draft);
@@ -41,6 +43,16 @@ export default function XhsPage() {
       setError(res.message || "生成失败");
     }
     setGenerating(false);
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(draft);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
   };
 
   return (
@@ -140,10 +152,14 @@ export default function XhsPage() {
                     </div>
                   )}
                   <button
-                    onClick={() => navigator.clipboard.writeText(draft)}
-                    className="mt-4 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200"
+                    onClick={handleCopy}
+                    className={`mt-4 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                      copied
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
                   >
-                    📋 复制文案
+                    {copied ? "✅ 复制成功" : "📋 复制文案"}
                   </button>
                 </>
               )}
